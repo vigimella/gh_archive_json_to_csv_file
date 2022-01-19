@@ -19,7 +19,7 @@ zip_files_dir = os.path.join(APP_ROOT, 'gh_archive_zip_files')
 
 # This function allows to unzip files previously downloaded and to create a csv files
 
-def multiple_unzip_file(find, web_url):
+def multiple_unzip_file(elms_to_find, web_url):
     a = web_url
 
     a = a.replace('https://data.gharchive.org/', '').split('-')
@@ -89,19 +89,21 @@ def multiple_unzip_file(find, web_url):
 
                         print('Searching if in a commit message exists a word to find \n')
 
-                        if search(find, commit['message']):
+                        for find in elms_to_find:
 
-                            print('Something has been found \n')
+                            if search(find, commit['message']):
 
-                            rows.append({
+                                print('Something has been found \n')
 
-                                'repository': repo_name,
-                                'author': commit['author']['name'],
-                                'commit message': commit['message'],
-                                'commit id': commit['sha'],
-                                'commit_date': commit_date
+                                rows.append({
 
-                            })
+                                    'repository': repo_name,
+                                    'author': commit['author']['name'],
+                                    'commit message': commit['message'],
+                                    'commit id': commit['sha'],
+                                    'commit_date': commit_date
+
+                                })
 
                     commits_data = pd.DataFrame(rows)
 
@@ -152,7 +154,7 @@ def url_generation(year, month, day, hour):
     # Multiprocess function definition
 
 
-def multiprocess(years, months, hours, find):
+def multiprocess(years, months, hours, elms_to_find):
     for year in years:
 
         for month in months:
@@ -165,7 +167,7 @@ def multiprocess(years, months, hours, find):
                     url_generation(year, month, day, hour)
 
     for url in URLs:
-        multiple_unzip_file(find, url)
+        multiple_unzip_file(elms_to_find, url)
 
 
 if __name__ == '__main__':
@@ -202,16 +204,14 @@ if __name__ == '__main__':
 
     # Multiprocessing
 
-    for find in elms_to_find:
-
-        p1 = multiprocessing.Process(target=multiprocess, args=(years, months_first, hours, find))
-        p2 = multiprocessing.Process(target=multiprocess, args=(years, months_second, hours, find))
-        p3 = multiprocessing.Process(target=multiprocess, args=(years, months_third, hours, find))
-        p4 = multiprocessing.Process(target=multiprocess, args=(years, months_fourth, hours, find))
+    p1 = multiprocessing.Process(target=multiprocess, args=(years, months_first, hours, elms_to_find))
+    p2 = multiprocessing.Process(target=multiprocess, args=(years, months_second, hours, elms_to_find))
+    p3 = multiprocessing.Process(target=multiprocess, args=(years, months_third, hours, elms_to_find))
+    p4 = multiprocessing.Process(target=multiprocess, args=(years, months_fourth, hours, elms_to_find))
 
     # Start multiprocessing
 
-        p1.start()
-        p2.start()
-        p3.start()
-        p4.start()
+    p1.start()
+    p2.start()
+    p3.start()
+    p4.start()
