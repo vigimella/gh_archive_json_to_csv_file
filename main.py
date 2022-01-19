@@ -187,7 +187,6 @@ if __name__ == '__main__':
 
     # Months are divided by trimester
 
-    months_first = [1]
     months_first = [1, 2, 3]
     months_second = [4, 5, 6]
     months_third = [7, 8, 9]
@@ -212,7 +211,7 @@ if __name__ == '__main__':
 
     # Start multiprocessing
 
-    p1.start()
-    p2.start()
-    p3.start()
-    p4.start()
+        p1.start()
+        p2.start()
+        p3.start()
+        p4.start()
