@@ -6,7 +6,6 @@ services:
     image: gh_archive_analysis:latest
     build: .
     restart: unless-stopped
-    ports:
-      - 5000:5000
     volumes:
-      - .:/app
+      - ./gh_archive_csv/:/usr/src/app/gh_archive_csv/
+      - ./gh_archive_zip_files/:/usr/src/app/gh_archive_zip_files/
