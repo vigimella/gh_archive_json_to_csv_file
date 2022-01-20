@@ -9,7 +9,7 @@ from re import search
 from datetime import datetime
 
 import logging as log
-log.basicConfig(level=log.INFO, format='%(asctime)s :: %(funcName)s - %(levelname)s :: %(message)s')
+log.basicConfig(level=log.INFO, format='%(asctime)s :: %(process)s :: %(funcName)s :: %(levelname)s :: %(message)s')
 
 # Folder abs paths 
 
@@ -119,9 +119,7 @@ def multiple_unzip_file(elms_to_find, web_url):
 
                 commits_data.to_csv(csv_location_path, sep=',', encoding='utf-8')
 
-        log.info('CSV n. ' + str(k + 1) + ' created')
-
-        k = k + 1
+        log.info(f'CSV {csv_location_path} created')
 
 
 def url_generation(year, month, day, hour):
