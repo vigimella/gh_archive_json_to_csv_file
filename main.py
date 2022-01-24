@@ -9,6 +9,7 @@ from re import search
 from datetime import datetime
 
 import logging as log
+
 log.basicConfig(level=log.INFO, format='%(asctime)s :: %(process)s :: %(funcName)s :: %(levelname)s :: %(message)s')
 
 # Folder abs paths 
@@ -28,8 +29,8 @@ def multiple_unzip_file(elms_to_find, web_url):
 
     a = web_url
 
-    a = a.replace('https://data.gharchive.org/', '').split('-')
-    folder_name = str(a[0]) + '-' + str(a[1])
+    a = a.replace('https://data.gharchive.org/', '')
+    folder_name = a.replace('.json.gz', '')
     log.info(folder_name)
 
     folder_path = os.path.join(zip_files_dir, folder_name)
@@ -62,16 +63,16 @@ def multiple_unzip_file(elms_to_find, web_url):
 
         # optional information could be removed, it is just a statistical output
 
-        #log.info('Optional information:')
+        # log.info('Optional information:')
 
         with gzip.open(file) as f:
             for line in f:
                 json_data = json.loads(line)
                 types.append(json_data['type'])
                 data_frame = pd.DataFrame({"types": types}).groupby("types").size().sort_values(ascending=False)
-            #log.info(data_frame)
+            # log.info(data_frame)
 
-        #log.info('CSV creation...')
+        # log.info('CSV creation...')
 
         log.info(f'Processing {file}...')
         with gzip.open(file) as archive:
@@ -94,12 +95,11 @@ def multiple_unzip_file(elms_to_find, web_url):
 
                     if commit['distinct']:
 
-                        #print('Searching if in a commit message exists a word to find \n')
+                        # print('Searching if in a commit message exists a word to find \n')
 
                         for find in elms_to_find:
 
                             if search(find, commit['message']):
-
                                 log.info(f'Something has been found: commit={commit["sha"]},repo={repo_name}')
 
                                 rows.append({
@@ -122,56 +122,27 @@ def multiple_unzip_file(elms_to_find, web_url):
         log.info(f'CSV {csv_location_path} created')
 
 
-def url_generation(year, month, day, hour):
-    """
-    Generation of URL to download .json.gz file
-    """
+def url_generation(start_date, end_date):
+    # date creation using date_range by pandas
 
-    current_date = datetime.now().strftime('%Y-%m-%d-%H')
-    date_to_anlyze = str(year) + '-' + str(month) + '-' + str(day) + '-' + str(hour)
+    dates = pd.date_range(start_date, end_date)
 
-    if date_to_anlyze <= current_date:
+    # adding dates into a list called new_dates
 
-        if month < 10 and day < 10:
+    new_dates = []
 
-            # url: 2020-01-01 
-            new_url = 'https://data.gharchive.org/' + str(year) + '-0' + str(month) + '-0' + str(day) + '-' + str(
-                hour) + '.json.gz'
+    for date in dates:
+        # going to replace 00:00:00 with H used as placeholder
+        new_dates.append(str(date).replace(' 00:00:00', '') + '-H')
 
-        elif month < 10 and day > 9:
+    # adding hour to date
 
-            # url: 2020-01-10
-            new_url = 'https://data.gharchive.org/' + str(year) + '-0' + str(month) + '-' + str(day) + '-' + str(
-                hour) + '.json.gz'
-
-        elif month > 9 and day > 9:
-
-            # url: 2020-10-10
-            new_url = 'https://data.gharchive.org/' + str(year) + '-' + str(month) + '-' + str(day) + '-' + str(
-                hour) + '.json.gz'
-
-        elif month > 9 and day < 10:
-
-            # url: 2020-10-01
-            new_url = 'https://data.gharchive.org/' + str(year) + '-' + str(month) + '-0' + str(day) + '-' + str(
-                hour) + '.json.gz'
-
-        URLs.append(new_url)
-
-    # Multiprocess function definition
+    for date in new_dates:
+        for i in range(24):
+            URLs.append('https://data.gharchive.org/' + date.replace('-H', '-' + str(i)) + '.json.gz')
 
 
-def multiprocess(years, months, hours, elms_to_find):
-    for year in years:
-
-        for month in months:
-
-            num_days = calendar.monthrange(year, month)[1]
-
-            for day in range(1, num_days):
-
-                for hour in hours:
-                    url_generation(year, month, day, hour)
+def multiprocess(URLs, elms_to_find):
 
     for url in URLs:
         multiple_unzip_file(elms_to_find, url)
@@ -191,30 +162,32 @@ if __name__ == '__main__':
 
     # The find variable is the filter to apply to the mining
 
-    elms_to_find = ['diff privacy', 'differential privacy', 'd privacy', 'dif. privacy', 'dp', 'differential priv.', 'diff priv.']
+    elms_to_find = ['diff privacy', 'differential privacy', 'd privacy', 'dif. privacy', 'dp', 'differential priv.',
+                    'diff priv.']
     URLs = []
 
-    # Months are divided by trimester
+    # dates generation
 
-    months_first = [1, 2, 3]
-    months_second = [4, 5, 6]
-    months_third = [7, 8, 9]
-    months_fourth = [10, 11, 12]
+    start_date = '2020-01-01' # yyyy-mm-dd
+    end_date = '2021-12-31' # yyyy-mm-dd
 
-    # Years to analyze
+    url_generation(start_date, end_date)
 
-    years = [2020, 2021]
+    # Splitting URLs list in sublist
 
-    # Hours to analyze
+    len_list = len(URLs)
+    n = int(len_list / 4)
 
-    hours = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    # using list comprehension
+
+    final_urls = [URLs[i * n:(i + 1) * n] for i in range((len(URLs) + n - 1) // n)]
 
     # Multiprocessing
 
-    p1 = multiprocessing.Process(target=multiprocess, args=(years, months_first, hours, elms_to_find))
-    p2 = multiprocessing.Process(target=multiprocess, args=(years, months_second, hours, elms_to_find))
-    p3 = multiprocessing.Process(target=multiprocess, args=(years, months_third, hours, elms_to_find))
-    p4 = multiprocessing.Process(target=multiprocess, args=(years, months_fourth, hours, elms_to_find))
+    p1 = multiprocessing.Process(target=multiprocess, args=(final_urls[0], elms_to_find))
+    p2 = multiprocessing.Process(target=multiprocess, args=(final_urls[1], elms_to_find))
+    p3 = multiprocessing.Process(target=multiprocess, args=(final_urls[2], elms_to_find))
+    p4 = multiprocessing.Process(target=multiprocess, args=(final_urls[3], elms_to_find))
 
     # Start multiprocessing
 
