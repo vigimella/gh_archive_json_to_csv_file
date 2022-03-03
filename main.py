@@ -10,7 +10,7 @@ from datetime import datetime
 
 import logging as log
 
-log.basicConfig(level=log.INFO, format='%(asctime)s :: %(process)s :: %(funcName)s :: %(levelname)s :: %(message)s')
+log.basicConfig(level=log.INFO, format='%(asctime)s :: proc_id %(process)s :: %(funcName)s :: %(levelname)s :: %(message)s')
 
 # Folder abs paths 
 
