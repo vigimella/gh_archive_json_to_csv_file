@@ -46,7 +46,7 @@ def url_generation(start_date, end_date):
     # adding hour to date
 
     for date in new_dates:
-        for i in range(5):
+        for i in range(24):
             URLs.append('https://data.gharchive.org/' + date.replace('-H', '-' + str(i)) + '.json.gz')
 
 
@@ -55,9 +55,8 @@ def download_json_file(web_url):
     file_name = file_name.replace('.json.gz', '')
     log.info(file_name)
 
-    log.info(f'Downloading {web_url}...')
     os.system(f'wget -q -o /dev/null {web_url} -P {zip_files_dir}')
-    log.info('Download finished...')
+    log.info(f' {web_url} Download finished...')
 
 
 def csv_creation(file):
@@ -67,24 +66,15 @@ def csv_creation(file):
     push_events = list()
     rows = list()
 
-    # file = os.path.join(zip_files_dir, file)
-
-    log.info(f'File path is: {file}')
-
     file_name = file.replace(zip_files_dir, '')
     file_name = file_name.replace('.json.gz', '')
     file_name = file_name.replace('/', '')
-
-    log.info(f'File name --> {file_name}')
 
     with gzip.open(file) as f:
         for line in f:
             json_data = json.loads(line)
             types.append(json_data['type'])
-            data_frame = pd.DataFrame({"types": types}).groupby("types").size().sort_values(ascending=False)
-        # log.info(data_frame)
 
-    log.info(f'Processing {file}...')
     with gzip.open(file) as archive:
 
         for line in archive:
@@ -142,32 +132,44 @@ if __name__ == '__main__':
         os.makedirs(zip_files_dir)
         log.info('Directory zip_files_dir created...')
 
+    # Cleaning all directory
+
     clean_directory(gh_archive_csv_dir)
     log.info(f'{gh_archive_csv_dir} cleaned...')
     clean_directory(zip_files_dir)
     log.info(f'{zip_files_dir} cleaned...')
 
+    # Defining list
+
     URLs = []
     JSONs = []
 
-    N_THREAD = 4
+    # Defining number of threads to use
 
-    # dates generation
+    N_THREADS = 4
+
+    # Dates generation
 
     # start_date = '2020-01-01'  # yyyy-mm-dd
-    start_date = '2020-07-05'  # yyyy-mm-dd
+    start_date = '2020-07-01'  # yyyy-mm-dd
     # end_date = '2021-12-31'  # yyyy-mm-dd
-    end_date = '2020-07-05'  # yyyy-mm-dd
+    end_date = '2020-07-31'  # yyyy-mm-dd
 
     url_generation(start_date, end_date)
+
+    # Starting download
+
+    with ThreadPoolExecutor(N_THREADS) as p:
+        p.map(download_json_file, URLs)
+
+    # Add all files contained in zip_dir into the list
 
     for elm in os.listdir(zip_files_dir):
         if elm.endswith('.json.gz'):
             elm = os.path.join(zip_files_dir, elm)
             JSONs.append(elm)
 
-    with ThreadPoolExecutor(N_THREAD) as p:
-        p.map(download_json_file, URLs)
+    # Execution CSV creation
 
-    with ThreadPoolExecutor(N_THREAD) as p:
+    with ThreadPoolExecutor(N_THREADS) as p:
         p.map(csv_creation, JSONs)
