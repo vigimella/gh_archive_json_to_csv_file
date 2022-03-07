@@ -1,16 +1,15 @@
 # Imports section
 
-import gzip, json, os
+import gzip, json, os, re, random, shutil, time, sys
 import multiprocessing
-import calendar
 import pandas as pd
 
-from re import search
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 import logging as log
 
-log.basicConfig(level=log.INFO, format='%(asctime)s :: proc_id %(process)s :: %(funcName)s :: %(levelname)s :: %(message)s')
+log.basicConfig(level=log.INFO,
+                format='%(asctime)s :: proc_id %(process)s :: %(funcName)s :: %(levelname)s :: %(message)s')
 
 # Folder abs paths 
 
@@ -19,107 +18,16 @@ gh_archive_csv_dir = os.path.join(APP_ROOT, 'gh_archive_csv')
 zip_files_dir = os.path.join(APP_ROOT, 'gh_archive_zip_files')
 
 
-# Function definition
-
-
-def multiple_unzip_file(elms_to_find, web_url):
-    """
-    This function allows to unzip files previously downloaded and to create a csv files
-    """
-
-    a = web_url
-
-    a = a.replace('https://data.gharchive.org/', '')
-    folder_name = a.replace('.json.gz', '')
-    log.info(folder_name)
-
-    folder_path = os.path.join(zip_files_dir, folder_name)
-
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-    log.info(f'Dowloading {web_url}...')
-    os.system(f'wget -q -o /dev/null {web_url} -P {folder_path}')
-
-    zip_files = []
-    file_names = []
-
-    # Add all files in folder path in list with abs path in zip_files and add all files name in file_names list.
-
-    for file in os.listdir(folder_path):
-        if file.endswith('.json.gz'):
-            filename = file.replace('.json.gz', '')
-            file = os.path.join(folder_path, file)
-
-            zip_files.append(file)
-            file_names.append(filename)
-
-    # Extract all files in list 
-
-    for i, file in enumerate(zip_files):
-        k = 0
-        types = list()
-        push_events = list()
-        rows = list()
-
-        # optional information could be removed, it is just a statistical output
-
-        # log.info('Optional information:')
-
-        with gzip.open(file) as f:
-            for line in f:
-                json_data = json.loads(line)
-                types.append(json_data['type'])
-                data_frame = pd.DataFrame({"types": types}).groupby("types").size().sort_values(ascending=False)
-            # log.info(data_frame)
-
-        # log.info('CSV creation...')
-
-        log.info(f'Processing {file}...')
-        with gzip.open(file) as archive:
-
-            for line in archive:
-
-                json_data = json.loads(line)
-
-                if json_data['type'] == 'PushEvent':
-                    push_events.append(json_data)
-
-            rows = list()
-
-            for push in push_events:
-
-                repo_name = push['repo']['name']
-                commit_date = push['created_at']
-
-                for commit in push['payload']['commits']:
-
-                    if commit['distinct']:
-
-                        # print('Searching if in a commit message exists a word to find \n')
-
-                        for find in elms_to_find:
-
-                            if search(find, commit['message']):
-                                log.info(f'Something has been found: commit={commit["sha"]},repo={repo_name}')
-
-                                rows.append({
-
-                                    'repository': repo_name,
-                                    'author': commit['author']['name'],
-                                    'commit_message': commit['message'],
-                                    'commit_id': commit['sha'],
-                                    'commit_date': commit_date
-
-                                })
-
-                    commits_data = pd.DataFrame(rows)
-
-                    csv_name = 'gh_archive_' + str(file_names[k]) + '.csv'
-                    csv_location_path = os.path.join(gh_archive_csv_dir, csv_name)
-
-                commits_data.to_csv(csv_location_path, sep=',', encoding='utf-8')
-
-        log.info(f'CSV {csv_location_path} created')
+def clean_directory(dir_path):
+    for filename in os.listdir(dir_path):
+        file_path = os.path.join(dir_path, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
 def url_generation(start_date, end_date):
@@ -138,14 +46,88 @@ def url_generation(start_date, end_date):
     # adding hour to date
 
     for date in new_dates:
-        for i in range(24):
+        for i in range(5):
             URLs.append('https://data.gharchive.org/' + date.replace('-H', '-' + str(i)) + '.json.gz')
 
 
-def multiprocess(URLs, elms_to_find):
+def download_json_file(web_url):
+    file_name = web_url.replace('https://data.gharchive.org/', '')
+    file_name = file_name.replace('.json.gz', '')
+    log.info(file_name)
 
-    for url in URLs:
-        multiple_unzip_file(elms_to_find, url)
+    log.info(f'Downloading {web_url}...')
+    os.system(f'wget -q -o /dev/null {web_url} -P {zip_files_dir}')
+    log.info('Download finished...')
+
+
+def csv_creation(file):
+    log.info(f'Analyzing file -> {file}')
+
+    types = list()
+    push_events = list()
+    rows = list()
+
+    # file = os.path.join(zip_files_dir, file)
+
+    log.info(f'File path is: {file}')
+
+    file_name = file.replace(zip_files_dir, '')
+    file_name = file_name.replace('.json.gz', '')
+    file_name = file_name.replace('/', '')
+
+    log.info(f'File name --> {file_name}')
+
+    with gzip.open(file) as f:
+        for line in f:
+            json_data = json.loads(line)
+            types.append(json_data['type'])
+            data_frame = pd.DataFrame({"types": types}).groupby("types").size().sort_values(ascending=False)
+        # log.info(data_frame)
+
+    log.info(f'Processing {file}...')
+    with gzip.open(file) as archive:
+
+        for line in archive:
+
+            json_data = json.loads(line)
+
+            if json_data['type'] == 'PushEvent':
+                push_events.append(json_data)
+
+        rows = list()
+
+        for push in push_events:
+
+            repo_name = push['repo']['name']
+            commit_date = push['created_at']
+
+            for commit in push['payload']['commits']:
+
+                if commit['distinct']:
+
+                    # print('Searching if in a commit message exists a word to find \n')
+
+                    if re.search('diff.* pri.*', commit['message']):
+                        log.info(f'Something has been found: commit={commit["sha"]},repo={repo_name}')
+                        rows.append({
+
+                            'repository': repo_name,
+                            'author': commit['author']['name'],
+                            'commit_message': commit['message'],
+                            'commit_id': commit['sha'],
+                            'commit_date': commit_date,
+                            'url': 'https://github.com/' + repo_name
+
+                        })
+
+                commits_data = pd.DataFrame(rows)
+
+                csv_name = 'gh_archive_' + file_name + '.csv'
+                csv_location_path = os.path.join(gh_archive_csv_dir, csv_name)
+
+            commits_data.to_csv(csv_location_path, sep=',', encoding='utf-8')
+
+    log.info(f'CSV {csv_location_path} created')
 
 
 if __name__ == '__main__':
@@ -160,38 +142,32 @@ if __name__ == '__main__':
         os.makedirs(zip_files_dir)
         log.info('Directory zip_files_dir created...')
 
-    # The find variable is the filter to apply to the mining
+    clean_directory(gh_archive_csv_dir)
+    log.info(f'{gh_archive_csv_dir} cleaned...')
+    clean_directory(zip_files_dir)
+    log.info(f'{zip_files_dir} cleaned...')
 
-    elms_to_find = ['diff privacy', 'differential privacy', 'd privacy', 'dif. privacy', 'dp', 'differential priv.',
-                    'diff priv.']
     URLs = []
+    JSONs = []
+
+    N_THREAD = 4
 
     # dates generation
 
-    start_date = '2020-01-01' # yyyy-mm-dd
-    end_date = '2021-12-31' # yyyy-mm-dd
+    # start_date = '2020-01-01'  # yyyy-mm-dd
+    start_date = '2020-07-05'  # yyyy-mm-dd
+    # end_date = '2021-12-31'  # yyyy-mm-dd
+    end_date = '2020-07-05'  # yyyy-mm-dd
 
     url_generation(start_date, end_date)
 
-    # Splitting URLs list in sublist
+    for elm in os.listdir(zip_files_dir):
+        if elm.endswith('.json.gz'):
+            elm = os.path.join(zip_files_dir, elm)
+            JSONs.append(elm)
 
-    len_list = len(URLs)
-    n = int(len_list / 4)
+    with ThreadPoolExecutor(N_THREAD) as p:
+        p.map(download_json_file, URLs)
 
-    # using list comprehension
-
-    final_urls = [URLs[i * n:(i + 1) * n] for i in range((len(URLs) + n - 1) // n)]
-
-    # Multiprocessing
-
-    p1 = multiprocessing.Process(target=multiprocess, args=(final_urls[0], elms_to_find))
-    p2 = multiprocessing.Process(target=multiprocess, args=(final_urls[1], elms_to_find))
-    p3 = multiprocessing.Process(target=multiprocess, args=(final_urls[2], elms_to_find))
-    p4 = multiprocessing.Process(target=multiprocess, args=(final_urls[3], elms_to_find))
-
-    # Start multiprocessing
-
-    p1.start()
-    p2.start()
-    p3.start()
-    p4.start()
+    with ThreadPoolExecutor(N_THREAD) as p:
+        p.map(csv_creation, JSONs)
