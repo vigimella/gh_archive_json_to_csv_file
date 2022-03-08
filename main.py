@@ -50,32 +50,28 @@ def url_generation(start_date, end_date):
             URLs.append('https://data.gharchive.org/' + date.replace('-H', '-' + str(i)) + '.json.gz')
 
 
-def download_json_file(web_url):
+def from_json_to_csv(web_url):
     file_name = web_url.replace('https://data.gharchive.org/', '')
-    file_name = file_name.replace('.json.gz', '')
-    log.info(file_name)
+    file_name_no_ex = file_name.replace('.json.gz', '')
+    log.info(f'Download of {file_name_no_ex} has started')
 
     os.system(f'wget -q -o /dev/null {web_url} -P {zip_files_dir}')
-    log.info(f' {web_url} Download finished...')
+    log.info(f'Download of {file_name_no_ex} has finished')
 
+    file_path = os.path.join(zip_files_dir, file_name)
 
-def csv_creation(file):
-    log.info(f'Analyzing file -> {file}')
+    log.info(f'Analyzing {file_name_no_ex}')
 
     types = list()
     push_events = list()
     rows = list()
 
-    file_name = file.replace(zip_files_dir, '')
-    file_name = file_name.replace('.json.gz', '')
-    file_name = file_name.replace('/', '')
-
-    with gzip.open(file) as f:
+    with gzip.open(file_path) as f:
         for line in f:
             json_data = json.loads(line)
             types.append(json_data['type'])
 
-    with gzip.open(file) as archive:
+    with gzip.open(file_path) as archive:
 
         for line in archive:
 
@@ -95,10 +91,8 @@ def csv_creation(file):
 
                 if commit['distinct']:
 
-                    # print('Searching if in a commit message exists a word to find \n')
-
                     if re.search('diff.* pri.*', commit['message']):
-                        log.info(f'Something has been found: commit={commit["sha"]},repo={repo_name}')
+                        # log.info(f'Something has been found: commit={commit["sha"]},repo={repo_name}')
                         rows.append({
 
                             'repository': repo_name,
@@ -106,18 +100,20 @@ def csv_creation(file):
                             'commit_message': commit['message'],
                             'commit_id': commit['sha'],
                             'commit_date': commit_date,
+                            'original_file': 'gh_archive_' + file_name_no_ex,
                             'url': 'https://github.com/' + repo_name
 
                         })
 
                 commits_data = pd.DataFrame(rows)
 
-                csv_name = 'gh_archive_' + file_name + '.csv'
+                csv_name = 'gh_archive_' + file_name_no_ex + '.csv'
                 csv_location_path = os.path.join(gh_archive_csv_dir, csv_name)
 
             commits_data.to_csv(csv_location_path, sep=',', encoding='utf-8')
 
     log.info(f'CSV {csv_location_path} created')
+    os.remove(file_path)
 
 
 if __name__ == '__main__':
@@ -142,7 +138,6 @@ if __name__ == '__main__':
     # Defining list
 
     URLs = []
-    JSONs = []
 
     # Defining number of threads to use
 
@@ -157,19 +152,7 @@ if __name__ == '__main__':
 
     url_generation(start_date, end_date)
 
-    # Starting download
+    # Start processes
 
     with ThreadPoolExecutor(N_THREADS) as p:
-        p.map(download_json_file, URLs)
-
-    # Add all files contained in zip_dir into the list
-
-    for elm in os.listdir(zip_files_dir):
-        if elm.endswith('.json.gz'):
-            elm = os.path.join(zip_files_dir, elm)
-            JSONs.append(elm)
-
-    # Execution CSV creation
-
-    with ThreadPoolExecutor(N_THREADS) as p:
-        p.map(csv_creation, JSONs)
+        p.map(from_json_to_csv, URLs)
