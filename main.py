@@ -145,9 +145,7 @@ if __name__ == '__main__':
 
     # Dates generation
 
-    # start_date = '2020-01-01'  # yyyy-mm-dd
     start_date = '2020-07-01'  # yyyy-mm-dd
-    # end_date = '2021-12-31'  # yyyy-mm-dd
     end_date = '2020-07-31'  # yyyy-mm-dd
 
     url_generation(start_date, end_date)
